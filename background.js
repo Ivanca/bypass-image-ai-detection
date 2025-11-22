@@ -1,5 +1,5 @@
 const MENU_ID = "invert-watermark";
-let lastGenerated = null;
+const PREVIEW_STORAGE_KEY = "watermarkPreview";
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -8,6 +8,7 @@ chrome.runtime.onInstalled.addListener(() => {
     contexts: ["image"]
   });
 });
+
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== MENU_ID || !tab?.id) {
@@ -32,12 +33,18 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       throw new Error(injection.result.error);
     }
 
-    lastGenerated = injection.result;
-    const previewUrl = buildPreviewPage(lastGenerated.sideA, lastGenerated.sideB);
-    await chrome.tabs.create({ url: previewUrl });
+    await chrome.storage.local.set({
+      [PREVIEW_STORAGE_KEY]: injection.result
+    });
+
+    await chrome.tabs.create({
+      url: chrome.runtime.getURL("popup.html")
+    });
   } catch (error) {
     const message = error?.message ?? String(error);
     console.error("Invert & Watermark Images error:", message);
+
+    await chrome.storage.local.remove(PREVIEW_STORAGE_KEY);
 
     if (tab?.id) {
       chrome.scripting.executeScript({
@@ -50,12 +57,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
   }
 });
-
-function buildPreviewPage(sideAUrl, sideBUrl) {
-  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /><title>Watermarked Preview</title><style>body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#111;color:#fff;display:flex;flex-direction:column;min-height:100vh;}header{padding:16px;text-align:center;background:#222;border-bottom:1px solid #333;}main{flex:1;display:flex;gap:1px;background:#111;}figure{flex:1;margin:0;display:flex;flex-direction:column;}figure img{flex:1;object-fit:contain;background:#000;}figcaption{padding:12px;text-align:center;background:#222;border-top:1px solid #333;font-size:14px;}</style></head><body><header><h1>Watermarked Variants</h1></header><main><figure><img src="${sideAUrl}" alt="Watermark Side A" /><figcaption>Watermark Side A</figcaption></figure><figure><img src="${sideBUrl}" alt="Watermark Side B" /><figcaption>Watermark Side B</figcaption></figure></main></body></html>`;
-  const base64 = btoa(unescape(encodeURIComponent(html)));
-  return `data:text/html;base64,${base64}`;
-}
 
 async function processImage(srcUrl, watermarkAUrl, watermarkBUrl) {
   const loadImage = (url, allowCors) =>
@@ -77,6 +78,93 @@ async function processImage(srcUrl, watermarkAUrl, watermarkBUrl) {
     const blob = await response.blob();
     return URL.createObjectURL(blob);
   };
+
+  function rgbToHsl(r, g, b) {
+    r /= 255;
+    g /= 255;
+    b /= 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+    if (max === min) {
+        h = s = 0; // achromatic
+    } else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+            case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+            case g: h = (b - r) / d + 2; break;
+            case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
+    }
+    return [h * 360, s, l];
+  }
+    function hslToRgb(h, s, l) {
+        let r, g, b;
+        if (s === 0) {
+            r = g = b = l; // achromatic
+        } else {
+            const hue2rgb = (p, q, t) => {
+                if (t < 0) t += 1;
+                if (t > 1) t -= 1;
+                if (t < 1 / 6) return p + (q - p) * 6 * t;
+                if (t < 1 / 2) return q;
+                if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+                return p;
+            };
+            const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            const p = 2 * l - q;
+            r = hue2rgb(p, q, h / 360 + 1 / 3);
+            g = hue2rgb(p, q, h / 360);
+            b = hue2rgb(p, q, h / 360 - 1 / 3);
+        }
+        return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+    }
+
+    function flipImageVertically(imageData) {
+        const width = imageData.width;
+        const height = imageData.height;
+        const data = imageData.data;
+        for (let y = 0; y < height / 2; y++) {
+            for (let x = 0; x < width; x++) {
+                const topIndex = (y * width + x) * 4;
+                const bottomIndex = ((height - y - 1) * width + x) * 4;
+                for (let i = 0; i < 4; i++) {
+                    const temp = data[topIndex + i];
+                    data[topIndex + i] = data[bottomIndex + i];
+                    data[bottomIndex + i] = temp;
+                }
+            }
+        }
+        return imageData;
+    }
+
+  
+    function changeHue(imageData, hueShift) {
+        const data = imageData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+            let r = data[i];
+            let g = data[i + 1];
+            let b = data[i + 2];
+
+            // 1. Convert RGB to HSL
+            let hsl = rgbToHsl(r, g, b); // You'll need to implement this function
+
+            // 2. Adjust the hue
+            hsl[0] = (hsl[0] + hueShift) % 360; // Assuming hueShift is in degrees
+
+            // 3. Convert HSL back to RGB
+            let newRgb = hslToRgb(hsl[0], hsl[1], hsl[2]); // You'll need to implement this function
+
+            // 4. Update pixel data
+            data[i] = newRgb[0];
+            data[i + 1] = newRgb[1];
+            data[i + 2] = newRgb[2];
+        }
+        return imageData;
+    }
 
   try {
     let baseImageSource = srcUrl;
@@ -117,26 +205,61 @@ async function processImage(srcUrl, watermarkAUrl, watermarkBUrl) {
     const frame = invertedCtx.getImageData(0, 0, width, height);
     const pixels = frame.data;
 
-    for (let i = 0; i < pixels.length; i += 4) {
-      pixels[i] = 255 - pixels[i];
-      pixels[i + 1] = 255 - pixels[i + 1];
-      pixels[i + 2] = 255 - pixels[i + 2];
-    }
+    const hueShift = 180; // Shift hue by 180 degrees for inversion
+    const result = flipImageVertically(changeHue(frame, hueShift));
 
-    invertedCtx.putImageData(frame, 0, 0);
+    invertedCtx.putImageData(result, 0, 0);
 
     const [watermarkA, watermarkB] = await Promise.all([
       loadImage(watermarkAUrl, false),
       loadImage(watermarkBUrl, false)
     ]);
 
-    const composeVariant = async (watermark) => {
+    const composeVariant = async (
+      watermark,
+      { maskOutsideGreen } = { maskOutsideGreen: false }
+    ) => {
       const canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext("2d");
-      ctx.drawImage(invertedCanvas, 0, 0);
-      ctx.drawImage(watermark, 0, 0, width, height);
+      if (maskOutsideGreen) {
+        ctx.fillStyle = "#00ff00";
+        ctx.fillRect(0, 0, width, height);
+      } else {
+        ctx.drawImage(invertedCanvas, 0, 0);
+      }
+      const naturalWidth = watermark.naturalWidth || watermark.width;
+      const naturalHeight = watermark.naturalHeight || watermark.height;
+
+      if (!naturalWidth || !naturalHeight) {
+        throw new Error("Watermark image has no measurable dimensions");
+      }
+
+      const overlayWidth = width * 0.75;
+      const overlayHeight = overlayWidth * (naturalHeight / naturalWidth);
+      const offsetX = (width - overlayWidth) / 2;
+      const offsetY = (height - overlayHeight) / 2;
+
+      if (maskOutsideGreen) {
+        ctx.save();
+        ctx.beginPath();
+        const clipLeft = Math.max(0, offsetX + 1);
+        const clipTop = Math.max(0, offsetY + 1);
+        const clipRight = Math.min(width, offsetX + overlayWidth - 1);
+        const clipBottom = Math.min(height, offsetY + overlayHeight - 1);
+        ctx.rect(
+          clipLeft,
+          clipTop,
+          Math.max(0, clipRight - clipLeft),
+          Math.max(0, clipBottom - clipTop)
+        );
+        ctx.clip();
+        ctx.drawImage(invertedCanvas, 0, 0);
+        ctx.restore();
+      }
+
+      ctx.drawImage(watermark, offsetX, offsetY, overlayWidth, overlayHeight);
       try {
         return canvas.toDataURL("image/png");
       } catch (readError) {
@@ -147,8 +270,8 @@ async function processImage(srcUrl, watermarkAUrl, watermarkBUrl) {
     };
 
     const [sideA, sideB] = await Promise.all([
-      composeVariant(watermarkA),
-      composeVariant(watermarkB)
+      composeVariant(watermarkA, { maskOutsideGreen: false }),
+      composeVariant(watermarkB, { maskOutsideGreen: true })
     ]);
 
     return { sideA, sideB };
@@ -156,3 +279,4 @@ async function processImage(srcUrl, watermarkAUrl, watermarkBUrl) {
     return { error: error?.message ?? String(error) };
   }
 }
+
