@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Invert & Watermark Images",
+  "version": "1.0.0",
+  "description": "Invert any image via context menu, overlay two watermark variants, and preview the results side by side.",
+  "permissions": [
+    "contextMenus",
+    "scripting",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["a.png", "b.png"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
