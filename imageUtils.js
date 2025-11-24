@@ -2,7 +2,7 @@
 
 
 
-async function processImage(srcUrl, lastWidthHeightRatio = null) {
+async function processImage(srcInput, lastWidthHeightRatio = null) {
 
   const isRestore = !!lastWidthHeightRatio;
 
@@ -28,15 +28,31 @@ async function processImage(srcUrl, lastWidthHeightRatio = null) {
     return URL.createObjectURL(blob);
   };
 
+  const canvasToBlob = (canvas, type = "image/png", quality = 0.92) =>
+    new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error("Unable to export image"));
+        }
+      }, type, quality);
+    });
+
 
   try {
-    let baseImageSource = srcUrl;
+    const isBlobInput = srcInput instanceof Blob;
+    const isStringInput = typeof srcInput === "string";
+    let baseImageSource = srcInput;
     let shouldUseCors = false;
     let revokeBaseUrl = false;
 
-    if (!srcUrl.startsWith("data:")) {
+    if (isBlobInput) {
+      baseImageSource = URL.createObjectURL(srcInput);
+      revokeBaseUrl = true;
+    } else if (isStringInput && !srcInput.startsWith("data:")) {
       try {
-        baseImageSource = await fetchAsObjectUrl(srcUrl);
+        baseImageSource = await fetchAsObjectUrl(srcInput);
         revokeBaseUrl = true;
       } catch (fetchError) {
         console.warn("Falling back to direct image load:", fetchError);
@@ -50,6 +66,8 @@ async function processImage(srcUrl, lastWidthHeightRatio = null) {
       URL.revokeObjectURL(baseImageSource);
     }
 
+    let imageSource = baseImage;
+
     if (isRestore) {
         const targetHeight = baseImage.naturalHeight || baseImage.height;
         const targetWidth = Math.round(targetHeight * lastWidthHeightRatio);
@@ -60,11 +78,11 @@ async function processImage(srcUrl, lastWidthHeightRatio = null) {
         const resizedCtx = resizedCanvas.getContext("2d");
         resizedCtx.clearRect(0, 0, targetWidth, targetHeight);
         resizedCtx.drawImage(baseImage, 0, 0, targetWidth, targetHeight);
-        baseImage.src = resizedCanvas.toDataURL();
+        imageSource = resizedCanvas;
     } 
 
-    const width = baseImage.naturalWidth || baseImage.width;
-    const height = baseImage.naturalHeight || baseImage.height;
+    const width = imageSource.naturalWidth || imageSource.width;
+    const height = imageSource.naturalHeight || imageSource.height;
 
     lastWidthHeightRatio = !isRestore ? width / height : null;
 
@@ -75,7 +93,7 @@ async function processImage(srcUrl, lastWidthHeightRatio = null) {
       willReadFrequently: true
     });
 
-    invertedCtx.drawImage(baseImage, 0, 0);
+  invertedCtx.drawImage(imageSource, 0, 0);
     const frame = invertedCtx.getImageData(0, 0, width, height);
     const pixels = frame.data;
     const amplitude = height * 0.06323396567; // approx 6.3% of height
@@ -84,11 +102,14 @@ async function processImage(srcUrl, lastWidthHeightRatio = null) {
     const result = 
       isRestore ?
         invertHue(flipImageVertically(warpImage(frame, amplitude))) :
+        // frame:
         warpImage(flipImageVertically(invertHue(frame)), -amplitude);
 
     invertedCtx.putImageData(result, 0, 0);
 
-    return { dataUrl: invertedCtx.canvas.toDataURL() , lastWidthHeightRatio};
+    const blob = await canvasToBlob(invertedCanvas);
+
+    return { blob, lastWidthHeightRatio};
   } catch (error) {
     return { error: error?.message ?? String(error) };
   }
