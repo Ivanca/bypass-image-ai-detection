@@ -2,8 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Watermarked Preview</title>
+    <title>Deform and back</title>
     <style>
+      body, html {
+        min-width: 320px;
+        min-height: 320px;
+      }
       body {
         margin: 0;
         font-family: Arial, Helvetica, sans-serif;
@@ -26,13 +30,34 @@
         display: flex;
         gap: 1px;
         background: #111;
+        position: relative;
+        transition: outline 0.2s ease;
+            flex-direction: column;
+      }
+
+      main.drag-over {
+        outline: 2px dashed #00bcd4;
+        outline-offset: -4px;
+      }
+
+      main.drag-over::after {
+        content: "Drop image to process";
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        color: #00bcd4;
+        background: rgba(0, 0, 0, 0.7);
+        pointer-events: none;
+        text-transform: uppercase;
+        letter-spacing: 1px;
       }
 
       figure {
         flex: 1;
         margin: 0;
-        display: flex;
-        flex-direction: column;
       }
 
       figure img {
@@ -52,17 +77,61 @@
       .message {
         flex: 1;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
         font-size: 16px;
         padding: 32px;
         text-align: center;
+        gap: 8px;
+      }
+
+      .message p {
+        margin: 0;
+      }
+
+      .message .hint {
+        font-size: 14px;
+        color: #aaa;
+      }
+
+      .drag-and-drop-zone {
+          display: flex;
+          justify-content: center;
+        }
+        
+      .drag-and-drop-zone > div {
+          background: darkcyan;
+          padding: 2em;
+          border: 2px dashed white;
+          margin: 1em;
+          flex-grow: 0.4;
+          text-align: center;
+          font-weight: bold;
+          font-size: 1.5em;
+          border-radius: 8px;
+          box-shadow: 0 0 0 5px darkcyan;
+          flex-basis: 40%;
+          margin: 2em 1em;
+      }
+
+      .output-images {
+          display: flex;
       }
     </style>
   </head>
   <body>
-    <header><h1>Watermarked Variants</h1></header>
-    <main id="content"><div class="message">Loading preview…</div></main>
+    <header><h1>Deform and back</h1></header>
+    <main id="content">
+      <div class="drag-and-drop-zone">
+        <div class="process-image">First drop here to deform an image</div>
+        <div class="restore-image">Drop here to un-deform an image</div>
+      </div>
+      <div class="message"></div>
+      <div class="output-images"></div>
+    </main>
+    <script src="./imageUtils.js"></script>
     <script type="module" src="popup.js"></script>
+
   </body>
 </html>
