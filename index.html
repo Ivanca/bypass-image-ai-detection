@@ -54,16 +54,32 @@
         letter-spacing: 1px;
       }
 
+      .wrapper {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
       figure {
         flex: 1;
         margin: 0;
         text-align: center;
+        position: relative;
+        width: 50%;
       }
-
       figure img {
-        flex: 1;
-        object-fit: contain;
-        background: #000;
+          flex: 1;
+          object-fit: contain;
+          background: #000;
+          position: absolute;
+          height: 100%;
+          top: 0;
+      }
+      #processed img {  
+        right: 0;
+      }
+      #restored img {
+        left: 0;
       }
 
       figcaption {
@@ -73,6 +89,14 @@
         border-top: 1px solid #333;
         font-size: 14px;
         display: none;
+      }
+
+      .messages {
+        position: fixed;
+        bottom: 12px;
+        background: #666;
+        left: 12px;
+        border-radius: 10px;
       }
 
       .message {
@@ -117,11 +141,19 @@
       }
 
       .output-images {
-          display: flex;
+        display: flex;
+        flex-grow: 1;
+        flex-shrink: 1;
+        flex-basis: min-content;
+      }
+
+      .hidden {
+        display: none;
       }
     </style>
   </head>
   <body>
+  <div class="wrapper">
     <header><h1>Deform and back</h1></header>
     <main id="content">
       <div class="drag-and-drop-zone">
@@ -129,8 +161,15 @@
         <div class="restore-image">Drop here to un-deform an image</div>
       </div>
       <div class="messages"></div>
-      <div class="output-images"></div>
+      <div class="output-images">
+        <figure id="processed"></figure>
+        <figure id="restored"></figure>
+      </div>
+      <!-- add a range input to select custom vale of amplitude -->
+      <input class="hidden" type="range" id="amplitudeRange" min="5" max="100" value="30" step="1" style="width: 80%; margin: 16px auto; display: block;">
+      <input class="hidden" type="range" id="frequencyRange" min="0" max="50" value="5" step="0.5" style="width: 80%; margin: 16px auto; display: block;">
     </main>
+  </div>
     <script src="./imageUtils.js"></script>
     <script type="module" src="popup.js"></script>
 

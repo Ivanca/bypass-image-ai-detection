@@ -26,38 +26,27 @@ const renderMessage = (text, hint) => {
 };
 
 const createFigure = (src, caption, id) => {
-  document.querySelector('#' + id)?.remove();
-  const figure = document.createElement("figure");
+  const figure = document.getElementById(id);
+  figure.innerHTML = "";
   const img = document.createElement("img");
   img.src = src;
   img.alt = caption;
-  figure.id = id;
   const figcaption = document.createElement("figcaption");
   figcaption.textContent = caption;
   figure.appendChild(img);
   figure.appendChild(figcaption);
-  return figure;
 };
 
 const renderPreview = (blob, caption, id = "processed") => {
   const objectUrl = URL.createObjectURL(blob);
-  const figure = createFigure(objectUrl, caption, id);
-  figure.querySelector("img").addEventListener(
-    "load",
-    () => URL.revokeObjectURL(objectUrl),
-    { once: true }
-  );
-  container.querySelector('.output-images').appendChild(figure);
+  createFigure(objectUrl, caption, id);
 };
 
-
+var lastFile = null;
 const handleDroppedFile = async (file, isRestore) => {
   try {
-    if (isRestore && !lastWidthHeightRatio) {
-      renderMessage("Source image goes first before we can restore it.", DROP_HINT);
-      return;
-    }
-    const result = await window.processImage(file, isRestore ? lastWidthHeightRatio : null);
+    lastFile = file;
+    const result = await window.processImage(file, isRestore ? (lastWidthHeightRatio || true) : null, isRestore);
     if (result?.error) {
       throw new Error(result.error);
     }
@@ -86,3 +75,18 @@ startDragAndDrop({
   onError: (message) => renderMessage(message || "Unable to handle drop.", DROP_HINT)
 });
 
+var debounceTimeout = null;
+const callback = async (event) => {
+  clearTimeout(debounceTimeout);
+  debounceTimeout = setTimeout(async () => {
+    const amplitude = parseInt(document.getElementById("amplitudeRange").value, 10) * -1;
+    const frequency = parseFloat(document.getElementById("frequencyRange").value, 10) / 1000;
+    if (lastFile) {
+      const result = await window.processImage(lastFile, lastWidthHeightRatio ? lastWidthHeightRatio : null, true, amplitude, frequency);
+      renderPreview(result.blob, "", lastWidthHeightRatio ? "processed" : "restored");
+    }
+  }, 100);
+}
+
+document.getElementById("amplitudeRange").addEventListener("input", callback);
+document.getElementById("frequencyRange").addEventListener("input", callback);

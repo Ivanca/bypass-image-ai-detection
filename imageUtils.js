@@ -2,12 +2,11 @@
 
 
 
-async function processImage(srcInput, lastWidthHeightRatio = null) {
+async function processImage(srcInput, lastWidthHeightRatio = null, isRestore = false, amplitude = null, frequency = null) {
 
-  const isRestore = !!lastWidthHeightRatio;
-
-  console.log(flipImageVertically);
-  console.log(invertHue);
+  if (lastWidthHeightRatio === true) {
+    lastWidthHeightRatio = null;
+  }
   const loadImage = (url, allowCors) =>
     new Promise((resolve, reject) => {
       const img = new Image();
@@ -62,13 +61,19 @@ async function processImage(srcInput, lastWidthHeightRatio = null) {
 
     const baseImage = await loadImage(baseImageSource, shouldUseCors);
 
-    if (revokeBaseUrl) {
-      URL.revokeObjectURL(baseImageSource);
-    }
+
+
+    // if (revokeBaseUrl) {
+    //   URL.revokeObjectURL(baseImageSource);
+    // }
 
     let imageSource = baseImage;
 
-    if (isRestore) {
+
+    const width = imageSource.naturalWidth || imageSource.width;
+    const height = imageSource.naturalHeight || imageSource.height;
+
+    if (isRestore && lastWidthHeightRatio && Math.round(lastWidthHeightRatio * 100) !== Math.round(width / height * 100)) {
         const targetHeight = baseImage.naturalHeight || baseImage.height;
         const targetWidth = Math.round(targetHeight * lastWidthHeightRatio);
         console.log("Restoring image to", targetWidth, "x", targetHeight);
@@ -80,9 +85,6 @@ async function processImage(srcInput, lastWidthHeightRatio = null) {
         resizedCtx.drawImage(baseImage, 0, 0, targetWidth, targetHeight);
         imageSource = resizedCanvas;
     } 
-
-    const width = imageSource.naturalWidth || imageSource.width;
-    const height = imageSource.naturalHeight || imageSource.height;
 
     lastWidthHeightRatio = !isRestore ? width / height : null;
 
@@ -96,14 +98,12 @@ async function processImage(srcInput, lastWidthHeightRatio = null) {
   invertedCtx.drawImage(imageSource, 0, 0);
     const frame = invertedCtx.getImageData(0, 0, width, height);
     const pixels = frame.data;
-    const amplitude = height * 0.06323396567; // approx 6.3% of height
-    // const amplitude = 70;
-    console.log("isRestore:", isRestore, "amplitude:", amplitude, "lastWidthHeightRatio:", lastWidthHeightRatio);
+
     const result = 
       isRestore ?
-        invertHue(flipImageVertically(warpImage(frame, amplitude))) :
+        invertHue(flipImageVertically(warpImage(frame, true, amplitude, frequency))) :
         // frame:
-        warpImage(flipImageVertically(invertHue(frame)), -amplitude);
+        warpImage(flipImageVertically(invertHue(frame)), false);
 
     invertedCtx.putImageData(result, 0, 0);
 
@@ -202,7 +202,15 @@ function invertHue(imageData) {
     return imageData;
 }
 
-function warpImage(imageData, amplitude) {
+function warpImage(imageData, isReverse = false, amplitude = null, frequency = null) {
+    if (amplitude === null) {
+        amplitude = Math.round(imageData.width * 0.06323396567);
+        document.getElementById("amplitudeRange").value = amplitude;
+        if (isReverse) {
+          amplitude *= -1;
+        }
+        console.log("Calculated amplitude:", amplitude);
+    }
     const canvas = document.createElement('canvas');
     canvas.width = imageData.width;
     canvas.height = imageData.height;
@@ -217,7 +225,14 @@ function warpImage(imageData, amplitude) {
     const outputData = ctx.createImageData(width, height);
     
     // Wave parameters
-    const frequency = 12.45 / width; // Adjust frequency based on image width
+    if (frequency === null) {
+        frequency = 12.45 / width; // Adjust frequency based on image width
+        console.log("Calculated frequency:", frequency);
+        document.getElementById("frequencyRange").value = Math.round(frequency * 1000);
+    }
+    if (isReverse) {
+      amplitude = -amplitude;
+    }
     const edgeRegion = Math.max(1, height / 3); // First/last 33% of image height
     
     // Bilinear interpolation helper
