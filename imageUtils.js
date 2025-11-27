@@ -200,7 +200,7 @@ function invertHue(imageData) {
 
 function warpImage(imageData, isReverse = false, amplitude = null, frequency = null) {
     if (amplitude === null) {
-        amplitude = Math.round(imageData.width * 0.08);
+        amplitude = Math.round(imageData.width * 0.06);
         document.getElementById("amplitudeRange").value = amplitude;
         console.log("Calculated amplitude:", amplitude);
     }
